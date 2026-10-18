@@ -1,0 +1,2 @@
+-- lib-comb: package manifest.
+{ modules: ["comb"] }
