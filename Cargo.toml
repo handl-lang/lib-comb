@@ -2,9 +2,11 @@
 name = "handl-lib-comb"
 version = "0.1.0"
 edition = "2024"
-description = "comb + combinators: Handl stdlib port (ADR-0128 split)."
-license = "MIT OR Apache-2.0"
+description = "Combinator library — pure handl (comb plus combinators)."
+license = "MIT"
 repository = "https://github.com/handl-lang/lib-comb"
+readme = "README.md"
+homepage = "https://github.com/handl-lang/lib-comb"
 
 # `comb` is pure handl; `combinators` ops are native `handl_ops::Op` impls.
 [dependencies]

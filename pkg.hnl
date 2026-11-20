@@ -1,2 +1,9 @@
 -- lib-comb: package manifest.
-{ modules: ["comb"] }
+{
+  modules: ["comb"],
+  name: "comb",
+  description: "Combinator library — pure handl (comb plus combinators).",
+  license: "MIT",
+  keywords: ["combinators", "functional", "stdlib", "handl"],
+  homepage: "https://github.com/handl-lang/lib-comb",
+}
