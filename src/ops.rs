@@ -1,13 +1,24 @@
 //! Rust `Function` impls for the `combinators` module — the handls
 //! (handlers) for the `op`/`handl` declarations in `combinators.hnl`.
 //!
-//! All functions are FFI atoms: they manipulate `serde_json::Value`
-//! callables via `apply_fn` from `handl-lib-ops`'s `shared` helpers and
-//! cannot be expressed as pure handl arrows without losing the exact
-//! `TypeMismatch` error messages the tests rely on. The `op`/`handl`
-//! declaration form (ADR-0077 Phase 2) declares the interface in
-//! `combinators.hnl`; these impls provide the logic and are registered
-//! in an [`OpRegistry`](handl_ops::OpRegistry).
+//! Callback arguments arrive as `{"__arrow__": …}` wire values under the
+//! tree-walk/host eval (and as legacy `FunctionValue` JSON under engines
+//! that serialize closures that way). All callback-*consuming* ops go
+//! through the `apply_callable*`/`call_with_bindings` helpers in
+//! `handl_lib_ops::shared`, which dispatch on the value shape:
+//! arrow-values are invoked via `ctx.try_call_value`, `FunctionValue`
+//! JSON via `eval_expr`. The `op`/`handl` declaration form (ADR-0077
+//! Phase 2) declares the interface in `combinators.hnl`; these impls
+//! provide the logic and are registered in an
+//! [`OpRegistry`](handl_ops::OpRegistry).
+//!
+//! The function-*producing* ops (`flow`/`compose`/`fanout_fn`/
+//! `constantly`/`flip`/`partial`) still build `FunctionValue` JSON: an
+//! `__arrow__` value carries a serialized `__ast__` body arena that a
+//! `serde_json`-level op cannot mint, so they only accept the legacy
+//! `FunctionValue` encoding. The pure-handl `comb.*` surface in
+//! `handl-packages/comb/*.hnl` covers the same operations with real
+//! arrows.
 
 use handl_ops::{Op, OpContext, OpError};
 
@@ -15,8 +26,9 @@ use handl_lib_ops::function_value::FunctionValue;
 use serde_json::Value as JsonValue;
 
 use handl_lib_ops::shared::{
-    apply_fn, apply_fn2, arr, b, bind_function_params, find_first, is_truthy_fn, key_to_string,
-    map_iter, require_array, require_function_and_array, require_function_value, require_functions,
+    apply_callable, apply_callable_args, apply_callable2, arr, b, call_with_bindings,
+    is_truthy_callable, key_to_string, map_callable_iter, require_array, require_callable,
+    require_function_value, require_functions,
 };
 
 // ===========================================================================
@@ -116,6 +128,17 @@ fn inline_chain(fns: &[FunctionValue]) -> Result<FunctionValue, OpError> {
     })
 }
 
+fn require_two_args(args: &[serde_json::Value], expected: usize) -> Result<(), OpError> {
+    if args.len() < expected {
+        return Err(OpError::TypeMismatch(format!(
+            "expected {} args, got {}",
+            expected,
+            args.len(),
+        )));
+    }
+    Ok(())
+}
+
 // ===========================================================================
 // Composition combinators
 // ===========================================================================
@@ -130,23 +153,20 @@ impl Op for Pipe {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 2 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                2,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 2)?;
         let mut value = args[0].clone();
         for fn_arg in &args[1..] {
-            let fn_val = require_function_value(fn_arg)?;
-            value = apply_fn(ctx, &fn_val, &value)?;
+            value = apply_callable(ctx, fn_arg, &value)?;
         }
         Ok(value)
     }
 }
 
 // ── flow / compose ─────────────────────────────────────────────────
+// NOTE: these ops *return* a function. They inline the `FunctionValue`
+// bodies into a new `FunctionValue`; they cannot accept or produce
+// `__arrow__` values (see module docs). The pure-handl `comb.flow` /
+// `comb.compose` arrows are the arrow-native equivalents.
 
 #[derive(Clone, Copy)]
 pub struct Flow;
@@ -187,19 +207,12 @@ impl Op for Fanout {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 2 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                2,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 2)?;
         let value = args[0].clone();
         let inner = value;
         let mut results = Vec::with_capacity(args.len() - 1);
         for fn_arg in &args[1..] {
-            let fn_val = require_function_value(fn_arg)?;
-            let result = apply_fn(ctx, &fn_val, &inner)?;
+            let result = apply_callable(ctx, fn_arg, &inner)?;
             results.push(result);
         }
         Ok(arr(&results))
@@ -207,6 +220,7 @@ impl Op for Fanout {
 }
 
 // ── fanout_fn ──────────────────────────────────────────────────────
+// NOTE: returns a `FunctionValue` (see Flow/Compose note above).
 
 /// Lazy fanout: `fn.fanout_fn(f, g)` returns a function `x => fn.fanout(x, f, g)`,
 /// i.e. an arrow that splits its input across `f` and `g` and yields
@@ -252,21 +266,17 @@ impl Op for Converge {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 3 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                3,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 3)?;
         let value = &args[0];
-        let combiner = require_function_value(&args[1])?;
+        // The combiner is only invoked when more than one branch produces
+        // a result, but validate it eagerly to preserve the historical
+        // argument-checking order.
+        require_callable(&args[1])?;
         let branch_count = args.len() - 2;
         let mut results = Vec::with_capacity(branch_count);
         let inner = value.clone();
         for branch_arg in &args[2..] {
-            let branch_fn = require_function_value(branch_arg)?;
-            let result = apply_fn(ctx, &branch_fn, &inner)?;
+            let result = apply_callable(ctx, branch_arg, &inner)?;
             results.push(result);
         }
         let combined = if results.len() == 1 {
@@ -274,7 +284,7 @@ impl Op for Converge {
         } else {
             let mut acc = results[0].clone();
             for item in &results[1..] {
-                acc = apply_fn2(ctx, &combiner, &acc, item)?;
+                acc = apply_callable2(ctx, &args[1], &acc, item)?;
             }
             acc
         };
@@ -296,22 +306,12 @@ impl Op for Choice {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 4 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                4,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 4)?;
         let value = &args[0];
-        let predicate = require_function_value(&args[1])?;
-        let on_true = require_function_value(&args[2])?;
-        let on_false = require_function_value(&args[3])?;
-
         let inner = value.clone();
-        let is_true = is_truthy_fn(ctx, &predicate, &inner)?;
-        let branch = if is_true { &on_true } else { &on_false };
-        Ok(apply_fn(ctx, branch, &inner)?)
+        let is_true = is_truthy_callable(ctx, &args[1], &inner)?;
+        let branch = if is_true { &args[2] } else { &args[3] };
+        apply_callable(ctx, branch, &inner)
     }
 }
 
@@ -325,19 +325,11 @@ impl Op for When {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 3 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                3,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 3)?;
         let value = &args[0];
-        let predicate = require_function_value(&args[1])?;
-        let transform = require_function_value(&args[2])?;
         let inner = value.clone();
-        if is_truthy_fn(ctx, &predicate, &inner)? {
-            Ok(apply_fn(ctx, &transform, &inner)?)
+        if is_truthy_callable(ctx, &args[1], &inner)? {
+            apply_callable(ctx, &args[2], &inner)
         } else {
             Ok(value.clone())
         }
@@ -352,21 +344,13 @@ impl Op for Unless {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 3 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                3,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 3)?;
         let value = &args[0];
-        let predicate = require_function_value(&args[1])?;
-        let transform = require_function_value(&args[2])?;
         let inner = value.clone();
-        if is_truthy_fn(ctx, &predicate, &inner)? {
+        if is_truthy_callable(ctx, &args[1], &inner)? {
             Ok(value.clone())
         } else {
-            Ok(apply_fn(ctx, &transform, &inner)?)
+            apply_callable(ctx, &args[2], &inner)
         }
     }
 }
@@ -463,13 +447,7 @@ impl Op for Match {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 2 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                2,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 2)?;
         let value = &args[0];
         for branch_arg in &args[1..] {
             let branch = branch_arg.as_array().ok_or(OpError::TypeMismatch(format!(
@@ -487,16 +465,7 @@ impl Op for Match {
             let handler = &branch[1];
             let mut bindings = Vec::new();
             if match_pattern(pattern, value, &mut bindings)? {
-                let fn_val =
-                    FunctionValue::from_json(handler).ok_or(OpError::TypeMismatch(format!(
-                        "expected {}, got {}",
-                        "function value", "non-function branch handler",
-                    )))?;
-                let vars: Vec<(String, serde_json::Value)> = bindings
-                    .into_iter()
-                    .map(|(name, val)| (name, serde_json::Value::from(val)))
-                    .collect();
-                return ctx.eval_expr(&fn_val.body, &vars);
+                return call_with_bindings(ctx, handler, &bindings);
             }
         }
         Err(OpError::Other("no matching branch".into()))
@@ -521,17 +490,9 @@ impl Op for Apply {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 2 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                2,
-                args.len(),
-            )));
-        }
-        let fn_val = require_function_value(&args[0])?;
+        require_two_args(args, 2)?;
         let call_args = require_array(&args[1])?;
-        let vars = bind_function_params(&fn_val, call_args)?;
-        Ok(ctx.eval_expr(&fn_val.body, &vars)?)
+        apply_callable_args(ctx, &args[0], call_args)
     }
 }
 
@@ -545,17 +506,10 @@ impl Op for Tap {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 2 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                2,
-                args.len(),
-            )));
-        }
-        let fn_val = require_function_value(&args[0])?;
+        require_two_args(args, 2)?;
         let value = &args[1];
         let inner = value.clone();
-        let _ = apply_fn(ctx, &fn_val, &inner)?;
+        let _ = apply_callable(ctx, &args[0], &inner)?;
         Ok(value.clone())
     }
 }
@@ -563,6 +517,18 @@ impl Op for Tap {
 // ===========================================================================
 // Collection iteration
 // ===========================================================================
+
+/// Require `(callable, array)` args — `args[0]` is the callback,
+/// `args[1]` the array. The callback itself is validated lazily by the
+/// `apply_callable*` helpers so arrow-values and `FunctionValue` JSON
+/// both reach the right call path.
+fn require_callable_and_array(
+    args: &[serde_json::Value],
+) -> Result<(&serde_json::Value, &[serde_json::Value]), OpError> {
+    require_two_args(args, 2)?;
+    let array = require_array(&args[1])?;
+    Ok((&args[0], array))
+}
 
 // ── flat_map ───────────────────────────────────────────────────────
 
@@ -574,8 +540,8 @@ impl Op for FlatMap {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        let (fn_val, array) = require_function_and_array(args)?;
-        let mapped = map_iter(ctx, &fn_val, array.iter())?;
+        let (fn_arg, array) = require_callable_and_array(args)?;
+        let mapped = map_callable_iter(ctx, fn_arg, array.iter())?;
         let mut results = Vec::new();
         for item in mapped {
             if let Some(sub) = item.as_array() {
@@ -598,12 +564,13 @@ impl Op for Find {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        let (fn_val, array) = require_function_and_array(args)?;
-        let result = find_first(ctx, &fn_val, array.iter())?;
-        match result {
-            Some(v) => Ok(serde_json::Value::from(v)),
-            None => Ok(serde_json::Value::from(serde_json::Value::Null)),
+        let (fn_arg, array) = require_callable_and_array(args)?;
+        for item in array {
+            if is_truthy_callable(ctx, fn_arg, item)? {
+                return Ok(serde_json::Value::from(item.clone()));
+            }
         }
+        Ok(serde_json::Value::from(serde_json::Value::Null))
     }
 }
 
@@ -617,9 +584,9 @@ impl Op for SomeFn {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        let (fn_val, array) = require_function_and_array(args)?;
+        let (fn_arg, array) = require_callable_and_array(args)?;
         for item in array {
-            if is_truthy_fn(ctx, &fn_val, item)? {
+            if is_truthy_callable(ctx, fn_arg, item)? {
                 return Ok(b(true));
             }
         }
@@ -635,9 +602,9 @@ impl Op for Every {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        let (fn_val, array) = require_function_and_array(args)?;
+        let (fn_arg, array) = require_callable_and_array(args)?;
         for item in array {
-            if !is_truthy_fn(ctx, &fn_val, item)? {
+            if !is_truthy_callable(ctx, fn_arg, item)? {
                 return Ok(b(false));
             }
         }
@@ -655,11 +622,11 @@ impl Op for GroupBy {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        let (fn_val, array) = require_function_and_array(args)?;
+        let (fn_arg, array) = require_callable_and_array(args)?;
         let mut groups: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
             std::collections::BTreeMap::new();
         for item in array {
-            let key = apply_fn(ctx, &fn_val, item)?;
+            let key = apply_callable(ctx, fn_arg, item)?;
             let key_str = key_to_string(&key);
             groups.entry(key_str).or_default().push(item.clone());
         }
@@ -681,11 +648,11 @@ impl Op for Partition {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        let (fn_val, array) = require_function_and_array(args)?;
+        let (fn_arg, array) = require_callable_and_array(args)?;
         let mut matching = Vec::new();
         let mut rest = Vec::new();
         for item in array {
-            if is_truthy_fn(ctx, &fn_val, item)? {
+            if is_truthy_callable(ctx, fn_arg, item)? {
                 matching.push(item.clone());
             } else {
                 rest.push(item.clone());
@@ -708,10 +675,10 @@ impl Op for CountBy {
         args: &[serde_json::Value],
         ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        let (fn_val, array) = require_function_and_array(args)?;
+        let (fn_arg, array) = require_callable_and_array(args)?;
         let mut counts: std::collections::BTreeMap<String, f64> = std::collections::BTreeMap::new();
         for item in array {
-            let key = apply_fn(ctx, &fn_val, item)?;
+            let key = apply_callable(ctx, fn_arg, item)?;
             let key_str = key_to_string(&key);
             *counts.entry(key_str).or_insert(0.0) += 1.0;
         }
@@ -728,6 +695,8 @@ impl Op for CountBy {
 // ===========================================================================
 
 // ── constantly ─────────────────────────────────────────────────────
+// NOTE: returns a `FunctionValue` (see Flow/Compose note above); the
+// pure-handl `comb.constantly` arrow is the arrow-native equivalent.
 
 #[derive(Clone, Copy)]
 pub struct Constantly;
@@ -754,6 +723,8 @@ impl Op for Constantly {
 }
 
 // ── flip ───────────────────────────────────────────────────────────
+// NOTE: returns a `FunctionValue` (see Flow/Compose note above); the
+// pure-handl `comb.flip` arrow is the arrow-native equivalent.
 
 #[derive(Clone, Copy)]
 pub struct Flip;
@@ -786,6 +757,8 @@ impl Op for Flip {
 }
 
 // ── partial ────────────────────────────────────────────────────────
+// NOTE: returns a `FunctionValue` (see Flow/Compose note above); the
+// pure-handl `comb.partial` arrow is the arrow-native equivalent.
 
 #[derive(Clone, Copy)]
 pub struct Partial;
@@ -795,13 +768,7 @@ impl Op for Partial {
         args: &[serde_json::Value],
         _ctx: &mut dyn OpContext,
     ) -> Result<serde_json::Value, OpError> {
-        if args.len() < 2 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {} args, got {}",
-                2,
-                args.len(),
-            )));
-        }
+        require_two_args(args, 2)?;
         let fn_val = require_function_value(&args[0])?;
         let bound_args = require_array(&args[1])?;
         let bound_count = bound_args.len().min(fn_val.params.len());
