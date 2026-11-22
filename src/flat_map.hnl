@@ -1,0 +1,14 @@
+--- Maps a function over a list and flattens the results one level.
+---
+--- @details
+--- `flat_map` takes `[f, xs]` and returns the concatenation of `f(x)`
+--- for each `x` in `xs`. When `f(x)` is a list its elements are spliced
+--- into the output; any other value is appended as-is. It is the
+--- collection counterpart of `comb.pipe`'s per-element application and
+--- the `comb`-surface spelling of `combinators.flat_map`.
+---
+--- @example
+--- `[x ~> [x, x * 2], [1, 2, 3]] >>> comb.flat_map`
+--- -- => [1, 2, 2, 4, 3, 6]
+---
+export flat_map :: [f, xs] ~> combinators.flat_map(f, xs)

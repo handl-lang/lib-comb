@@ -1,0 +1,12 @@
+--- Tests whether all elements of a list satisfy a predicate.
+---
+--- @details
+--- `every` takes `[pred, xs]` and returns `true` when `pred(x)` is
+--- truthy for every `x` in `xs` — vacuously `true` for the empty
+--- list. It is the `comb`-surface spelling of `combinators.every`.
+---
+--- @example
+--- `[x ~> x > 0, [1, 2, 3]] >>> comb.every`
+--- -- => true
+---
+export every :: [pred, xs] ~> combinators.every(pred, xs)

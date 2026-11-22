@@ -1,0 +1,13 @@
+--- Splits a list into elements that satisfy a predicate and those that do not.
+---
+--- @details
+--- `partition` takes `[pred, xs]` and returns `[matching, rest]` —
+--- two lists preserving the original order: the elements for which
+--- `pred(x)` is truthy, then the elements for which it is not. It is
+--- the `comb`-surface spelling of `combinators.partition`.
+---
+--- @example
+--- `[x ~> x % 2 == 0, [1, 2, 3, 4]] >>> comb.partition`
+--- -- => [[2, 4], [1, 3]]
+---
+export partition :: [pred, xs] ~> combinators.partition(pred, xs)

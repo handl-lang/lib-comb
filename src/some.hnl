@@ -1,0 +1,13 @@
+--- Tests whether any element of a list satisfies a predicate.
+---
+--- @details
+--- `some` takes `[pred, xs]` and returns `true` when `pred(x)` is
+--- truthy for at least one `x` in `xs`, `false` otherwise (including
+--- the empty list). It is the `comb`-surface spelling of
+--- `combinators.some`.
+---
+--- @example
+--- `[x ~> x > 3, [1, 2, 3, 4]] >>> comb.some`
+--- -- => true
+---
+export some :: [pred, xs] ~> combinators.some(pred, xs)

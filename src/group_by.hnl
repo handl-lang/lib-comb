@@ -1,0 +1,13 @@
+--- Groups the elements of a list by a key function.
+---
+--- @details
+--- `group_by` takes `[key_fn, xs]` and returns an object mapping each
+--- distinct `key_fn(x)` (stringified) to the list of elements that
+--- produced it. Groups are keyed in sorted order. It is the
+--- `comb`-surface spelling of `combinators.group_by`.
+---
+--- @example
+--- `[x ~> x % 2, [1, 2, 3, 4]] >>> comb.group_by`
+--- -- => { "0": [2, 4], "1": [1, 3] }
+---
+export group_by :: [key_fn, xs] ~> combinators.group_by(key_fn, xs)

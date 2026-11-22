@@ -25,17 +25,31 @@ pub const CONSTANTLY_HNL: &str = include_str!("constantly.hnl");
 
 pub const CONVERGE_HNL: &str = include_str!("converge.hnl");
 
+pub const COUNT_BY_HNL: &str = include_str!("count_by.hnl");
+
+pub const EVERY_HNL: &str = include_str!("every.hnl");
+
 pub const FANOUT_FN_HNL: &str = include_str!("fanout_fn.hnl");
 
 pub const FANOUT_HNL: &str = include_str!("fanout.hnl");
+
+pub const FIND_HNL: &str = include_str!("find.hnl");
+
+pub const FLAT_MAP_HNL: &str = include_str!("flat_map.hnl");
 
 pub const FLIP_HNL: &str = include_str!("flip.hnl");
 
 pub const FLOW_HNL: &str = include_str!("flow.hnl");
 
+pub const GROUP_BY_HNL: &str = include_str!("group_by.hnl");
+
 pub const PARTIAL_HNL: &str = include_str!("partial.hnl");
 
+pub const PARTITION_HNL: &str = include_str!("partition.hnl");
+
 pub const PIPE_HNL: &str = include_str!("pipe.hnl");
+
+pub const SOME_HNL: &str = include_str!("some.hnl");
 
 pub const TAP_HNL: &str = include_str!("tap.hnl");
 

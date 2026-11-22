@@ -235,10 +235,6 @@ name = "handl-lib-ip"
 version = "0.1.0"
 
 [[patch.unused]]
-name = "handl-lib-tag"
-version = "0.1.0"
-
-[[patch.unused]]
 name = "handl-lib-desugar"
 version = "0.1.0"
 
@@ -475,23 +471,23 @@ name = "handl-lib-ffi"
 version = "0.1.0"
 
 [[patch.unused]]
+name = "handl-lib-perlin"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "handl-plugin-lib-lang-eval"
+version = "0.1.0"
+
+[[patch.unused]]
+name = "hnl-engine-typecheck-nbe"
+version = "0.1.0"
+
+[[patch.unused]]
 name = "hnl-engine-exec-cranelift"
 version = "0.1.0"
 
 [[patch.unused]]
 name = "handl-lib-bytes"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-hello"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-lib-perlin"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "hnl-engine-typecheck-nbe"
 version = "0.1.0"
 
 [[patch.unused]]
@@ -504,10 +500,6 @@ version = "0.1.0"
 
 [[patch.unused]]
 name = "hnl-engine-transform-rewrite"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "handl-plugin-lib-lang-eval"
 version = "0.1.0"
 
 [[patch.unused]]

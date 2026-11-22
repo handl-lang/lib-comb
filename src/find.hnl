@@ -1,0 +1,12 @@
+--- Finds the first element of a list satisfying a predicate.
+---
+--- @details
+--- `find` takes `[pred, xs]` and returns the first `x` in `xs` for
+--- which `pred(x)` is truthy, or `null` when no element matches. It is
+--- the `comb`-surface spelling of `combinators.find`.
+---
+--- @example
+--- `[x ~> x > 2, [1, 2, 3, 4]] >>> comb.find`
+--- -- => 3
+---
+export find :: [pred, xs] ~> combinators.find(pred, xs)
