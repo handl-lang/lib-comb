@@ -1,6 +1,7 @@
 -- lib-comb: package manifest.
 {
-  modules: ["comb"],
+  modules: ["combinators"],
+  entry: "src/combinators.hnl",
   name: "comb",
   description: "Combinator library — pure handl (comb plus combinators).",
   license: "MIT",
