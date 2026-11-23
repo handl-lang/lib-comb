@@ -13,120 +13,23 @@
 //! [`OpRegistry`](handl_ops::OpRegistry).
 //!
 //! The function-*producing* ops (`flow`/`compose`/`fanout_fn`/
-//! `constantly`/`flip`/`partial`) still build `FunctionValue` JSON: an
-//! `__arrow__` value carries a serialized `__ast__` body arena that a
-//! `serde_json`-level op cannot mint, so they only accept the legacy
-//! `FunctionValue` encoding. The pure-handl `comb.*` surface in
-//! `handl-packages/comb/*.hnl` covers the same operations with real
-//! arrows.
+//! `constantly`/`flip`/`partial`) were removed: they only accepted and
+//! returned legacy `FunctionValue` JSON, which no engine can call. The
+//! pure-handl `comb.*` surface in `handl-packages/comb/*.hnl` covers the
+//! same operations with real arrows.
 
 use handl_ops::{Op, OpContext, OpError};
 
-use handl_lib_ops::function_value::FunctionValue;
 use serde_json::Value as JsonValue;
 
 use handl_lib_ops::shared::{
     apply_callable, apply_callable_args, apply_callable2, arr, b, call_with_bindings,
     is_truthy_callable, key_to_string, map_callable_iter, require_array, require_callable,
-    require_function_value, require_functions,
 };
 
 // ===========================================================================
 // Helpers
 // ===========================================================================
-
-fn substitute_param(body: &str, param: &str, replacement: &str) -> String {
-    let wrapped = format!("({replacement})");
-    let mut result = String::new();
-    let bytes = body.as_bytes();
-    let mut i = 0;
-    let mut in_string = false;
-    while i < body.len() {
-        let ch = bytes[i];
-        if in_string {
-            if ch == b'\\' && i + 1 < body.len() {
-                result.push_str(&body[i..i + 2]);
-                i += 2;
-                continue;
-            }
-            if ch == b'"' {
-                in_string = false;
-                result.push('"');
-                i += 1;
-                continue;
-            }
-            let end = next_char_boundary(body, i);
-            result.push_str(&body[i..end]);
-            i = end;
-            continue;
-        }
-        if ch == b'"' {
-            in_string = true;
-            result.push('"');
-            i += 1;
-            continue;
-        }
-        if body[i..].starts_with(param) {
-            let before_ok = i == 0 || !is_ident_char(bytes[i - 1]);
-            let after = i + param.len();
-            let after_ok = after >= body.len() || !is_ident_char(bytes[after]);
-            if before_ok && after_ok {
-                result.push_str(&wrapped);
-                i = after;
-                continue;
-            }
-        }
-        let end = next_char_boundary(body, i);
-        result.push_str(&body[i..end]);
-        i = end;
-    }
-    result
-}
-
-fn next_char_boundary(s: &str, i: usize) -> usize {
-    let mut j = i + 1;
-    while j < s.len() && !s.is_char_boundary(j) {
-        j += 1;
-    }
-    j
-}
-
-fn is_ident_char(b: u8) -> bool {
-    b.is_ascii_alphanumeric() || b == b'_'
-}
-
-fn inline_chain(fns: &[FunctionValue]) -> Result<FunctionValue, OpError> {
-    if fns.is_empty() {
-        return Err(OpError::TypeMismatch(format!(
-            "expected {} args, got {}",
-            1, 0,
-        )));
-    }
-    let first_fn = &fns[0];
-    let input_param = first_fn
-        .params
-        .first()
-        .map(|(name, _)| name.as_str())
-        .unwrap_or("x");
-
-    let mut body = first_fn.body.clone();
-    for fn_val in &fns[1..] {
-        let param = fn_val
-            .params
-            .first()
-            .map(|(name, _)| name.as_str())
-            .unwrap_or("x");
-        body = substitute_param(&fn_val.body, param, &body);
-    }
-
-    Ok(FunctionValue {
-        params: vec![(input_param.to_string(), serde_json::Value::Null)],
-        return_schema: None,
-        body,
-        patterns: Vec::new(),
-        captured: Vec::new(),
-    })
-}
 
 fn require_two_args(args: &[serde_json::Value], expected: usize) -> Result<(), OpError> {
     if args.len() < expected {
@@ -162,41 +65,6 @@ impl Op for Pipe {
     }
 }
 
-// ── flow / compose ─────────────────────────────────────────────────
-// NOTE: these ops *return* a function. They inline the `FunctionValue`
-// bodies into a new `FunctionValue`; they cannot accept or produce
-// `__arrow__` values (see module docs). The pure-handl `comb.flow` /
-// `comb.compose` arrows are the arrow-native equivalents.
-
-#[derive(Clone, Copy)]
-pub struct Flow;
-impl Op for Flow {
-    fn call(
-        &self,
-        args: &[serde_json::Value],
-        _ctx: &mut dyn OpContext,
-    ) -> Result<serde_json::Value, OpError> {
-        let fns = require_functions(args)?;
-        let composed = inline_chain(&fns)?;
-        Ok(serde_json::Value::from(composed))
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct Compose;
-impl Op for Compose {
-    fn call(
-        &self,
-        args: &[serde_json::Value],
-        _ctx: &mut dyn OpContext,
-    ) -> Result<serde_json::Value, OpError> {
-        let fns = require_functions(args)?;
-        let reversed: Vec<FunctionValue> = fns.into_iter().rev().collect();
-        let composed = inline_chain(&reversed)?;
-        Ok(serde_json::Value::from(composed))
-    }
-}
-
 // ── fanout ─────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy)]
@@ -216,43 +84,6 @@ impl Op for Fanout {
             results.push(result);
         }
         Ok(arr(&results))
-    }
-}
-
-// ── fanout_fn ──────────────────────────────────────────────────────
-// NOTE: returns a `FunctionValue` (see Flow/Compose note above).
-
-/// Lazy fanout: `fn.fanout_fn(f, g)` returns a function `x => fn.fanout(x, f, g)`,
-/// i.e. an arrow that splits its input across `f` and `g` and yields
-/// `[f(x), g(x)]`. This is the curried/combinator form of [`Fanout`] and the
-/// desugar target of the `&&&` arrow-calculus sugar.
-#[derive(Clone, Copy)]
-pub struct FanoutFn;
-impl Op for FanoutFn {
-    fn call(
-        &self,
-        args: &[serde_json::Value],
-        _ctx: &mut dyn OpContext,
-    ) -> Result<serde_json::Value, OpError> {
-        let fns = require_functions(args)?;
-        // Bake the branch functions into the body as object-literal JSON so the
-        // returned arrow, when applied, calls `fn.fanout(x, f, g, ...)`. Object
-        // literals accept quoted keys, so `serde_json::to_string` output parses.
-        let branches: Vec<String> = fns
-            .iter()
-            .map(|fv| serde_json::to_string(&fv.clone().to_json()))
-            .collect::<Result<_, _>>()
-            .map_err(|e| OpError::Other(format!("fanout_fn: serialize branch: {e}")))?;
-        let branch_list = branches.join(", ");
-        let body = format!("fn.fanout(x, {branch_list})");
-        let fn_val = FunctionValue {
-            params: vec![("x".to_string(), serde_json::Value::Null)],
-            return_schema: None,
-            body,
-            patterns: Vec::new(),
-            captured: Vec::new(),
-        };
-        Ok(serde_json::Value::from(fn_val))
     }
 }
 
@@ -690,122 +521,12 @@ impl Op for CountBy {
     }
 }
 
-// ===========================================================================
-// Function manipulation
-// ===========================================================================
-
-// ── constantly ─────────────────────────────────────────────────────
-// NOTE: returns a `FunctionValue` (see Flow/Compose note above); the
-// pure-handl `comb.constantly` arrow is the arrow-native equivalent.
-
-#[derive(Clone, Copy)]
-pub struct Constantly;
-impl Op for Constantly {
-    fn call(
-        &self,
-        args: &[serde_json::Value],
-        _ctx: &mut dyn OpContext,
-    ) -> Result<serde_json::Value, OpError> {
-        let value = args.first().ok_or(OpError::TypeMismatch(format!(
-            "expected {} args, got {}",
-            1, 0,
-        )))?;
-        let captured = value.clone();
-        let fn_val = FunctionValue {
-            params: vec![("_".to_string(), serde_json::Value::Null)],
-            return_schema: None,
-            body: serde_json::to_string(&captured).unwrap_or_else(|_| "null".to_string()),
-            patterns: Vec::new(),
-            captured: Vec::new(),
-        };
-        Ok(serde_json::Value::from(fn_val))
-    }
-}
-
-// ── flip ───────────────────────────────────────────────────────────
-// NOTE: returns a `FunctionValue` (see Flow/Compose note above); the
-// pure-handl `comb.flip` arrow is the arrow-native equivalent.
-
-#[derive(Clone, Copy)]
-pub struct Flip;
-impl Op for Flip {
-    fn call(
-        &self,
-        args: &[serde_json::Value],
-        _ctx: &mut dyn OpContext,
-    ) -> Result<serde_json::Value, OpError> {
-        let fn_val = require_function_value(args.first().ok_or(OpError::TypeMismatch(
-            format!("expected {} args, got {}", 1, 0,),
-        ))?)?;
-        if fn_val.params.len() < 2 {
-            return Err(OpError::TypeMismatch(format!(
-                "expected {}, got {}",
-                "function with at least 2 parameters", "function with fewer than 2 parameters",
-            )));
-        }
-        let mut swapped_params = fn_val.params.clone();
-        swapped_params.swap(0, 1);
-        let flipped = FunctionValue {
-            params: swapped_params,
-            return_schema: None,
-            body: fn_val.body.clone(),
-            patterns: Vec::new(),
-            captured: Vec::new(),
-        };
-        Ok(serde_json::Value::from(flipped))
-    }
-}
-
-// ── partial ────────────────────────────────────────────────────────
-// NOTE: returns a `FunctionValue` (see Flow/Compose note above); the
-// pure-handl `comb.partial` arrow is the arrow-native equivalent.
-
-#[derive(Clone, Copy)]
-pub struct Partial;
-impl Op for Partial {
-    fn call(
-        &self,
-        args: &[serde_json::Value],
-        _ctx: &mut dyn OpContext,
-    ) -> Result<serde_json::Value, OpError> {
-        require_two_args(args, 2)?;
-        let fn_val = require_function_value(&args[0])?;
-        let bound_args = require_array(&args[1])?;
-        let bound_count = bound_args.len().min(fn_val.params.len());
-        if bound_count == 0 {
-            return Ok(serde_json::Value::from(fn_val));
-        }
-        let remaining_params: Vec<(String, serde_json::Value)> = fn_val.params[bound_count..]
-            .iter()
-            .map(|(name, schema)| (name.clone(), schema.clone()))
-            .collect();
-        let mut body = fn_val.body.clone();
-        for i in 0..bound_count {
-            let param_name = &fn_val.params[i].0;
-            let replacement =
-                serde_json::to_string(&bound_args[i]).unwrap_or_else(|_| "null".to_string());
-            body = substitute_param(&body, param_name, &replacement);
-        }
-        let partial_fn = FunctionValue {
-            params: remaining_params,
-            return_schema: None,
-            body,
-            patterns: Vec::new(),
-            captured: Vec::new(),
-        };
-        Ok(serde_json::Value::from(partial_fn))
-    }
-}
-
 use handl_ops::OpRegistry;
 use std::sync::Arc;
 
 pub const COMBINATORS_OPS: &[&str] = &[
     "combinators.pipe",
-    "combinators.flow",
-    "combinators.compose",
     "combinators.fanout",
-    "combinators.fanout_fn",
     "combinators.choice",
     "combinators.apply",
     "combinators.flat_map",
@@ -817,9 +538,6 @@ pub const COMBINATORS_OPS: &[&str] = &[
     "combinators.count_by",
     "combinators.tap",
     "combinators.match",
-    "combinators.constantly",
-    "combinators.flip",
-    "combinators.partial",
     "combinators.when",
     "combinators.unless",
     "combinators.converge",
@@ -828,10 +546,7 @@ pub const COMBINATORS_OPS: &[&str] = &[
 pub fn combinators_op_registry() -> OpRegistry {
     let mut registry = OpRegistry::new();
     registry.register("combinators.pipe", Arc::new(Pipe));
-    registry.register("combinators.flow", Arc::new(Flow));
-    registry.register("combinators.compose", Arc::new(Compose));
     registry.register("combinators.fanout", Arc::new(Fanout));
-    registry.register("combinators.fanout_fn", Arc::new(FanoutFn));
     registry.register("combinators.choice", Arc::new(Choice));
     registry.register("combinators.apply", Arc::new(Apply));
     registry.register("combinators.flat_map", Arc::new(FlatMap));
@@ -843,9 +558,6 @@ pub fn combinators_op_registry() -> OpRegistry {
     registry.register("combinators.count_by", Arc::new(CountBy));
     registry.register("combinators.tap", Arc::new(Tap));
     registry.register("combinators.match", Arc::new(Match));
-    registry.register("combinators.constantly", Arc::new(Constantly));
-    registry.register("combinators.flip", Arc::new(Flip));
-    registry.register("combinators.partial", Arc::new(Partial));
     registry.register("combinators.when", Arc::new(When));
     registry.register("combinators.unless", Arc::new(Unless));
     registry.register("combinators.converge", Arc::new(Converge));
