@@ -6,7 +6,7 @@
 
 [[repos]]
 name = "handl-lang/lib-comb"
-dir = "/home/luis/GitHub/handl-lang/lib-comb"
+dir = "~//GitHub/handl-lang/lib-comb"
 branch = "refs/heads/main"
   [repos.runner]
   kind = "script"
