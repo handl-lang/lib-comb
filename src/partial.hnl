@@ -12,7 +12,7 @@
 --- `5 >>> add_from_10`
 --- -- => 35
 ---
-export partial :: [f, bound] ~> match bound {
+export partial := [f, bound] ~> match bound {
   [a]: x ~> f(a, x),
   [a, b]: x ~> f(a, b, x),
   [a, b, c]: x ~> f(a, b, c, x),

@@ -13,4 +13,4 @@
 --- `[10, 3] >>> (sub >>> comb.flip) >>> comb.apply`
 --- -- => -7
 ---
-export flip :: f ~> x ~> y ~> f(y, x)
+export flip := f ~> x ~> y ~> f(y, x)

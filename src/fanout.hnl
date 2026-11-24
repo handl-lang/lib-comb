@@ -11,9 +11,9 @@
 --- `[3, x ~> x + 1, x ~> x * 2] >>> comb.fanout`
 --- -- => [4, 6]
 ---
-export fanout :: args ~> match args {
+export fanout := args ~> match args {
   [value, ...fs]: do {
-    rev :: xs ~> while { xs: xs, acc: [] } {
+    rev := xs ~> while { xs: xs, acc: [] } {
       [xs, acc] ~> match xs {
         []: { out: acc },
         [h, ...t]: { state: { xs: t, acc: [h, ...acc] } }

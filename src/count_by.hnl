@@ -10,4 +10,4 @@
 --- `[x ~> x % 2, [1, 2, 3, 4, 5]] >>> comb.count_by`
 --- -- => { "0": 2, "1": 3 }
 ---
-export count_by :: [key_fn, xs] ~> combinators.count_by(key_fn, xs)
+export count_by := [key_fn, xs] ~> combinators.count_by(key_fn, xs)

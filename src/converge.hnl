@@ -15,7 +15,7 @@
 --- `[6, [a, b] ~> a + b, x ~> x * 2, x ~> x * 3] >>> comb.converge`
 --- -- => 30
 ---
-export converge :: args ~> match args {
+export converge := args ~> match args {
   [value, combiner, ...branches]: match branches {
     []: null,
     [h, ...t]: {

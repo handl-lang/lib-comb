@@ -11,4 +11,4 @@
 --- `999 >>> f`
 --- -- => 0
 ---
-export constantly :: c ~> _ ~> c
+export constantly := c ~> _ ~> c

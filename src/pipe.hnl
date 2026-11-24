@@ -11,7 +11,7 @@
 --- `[3, x ~> x + 1, x ~> x * 2] >>> comb.pipe`
 --- -- => 8
 ---
-export pipe :: args ~> match args {
+export pipe := args ~> match args {
   [value, ...fs]: {
     while { xs: fs, acc: value } {
       [xs, acc] ~> match xs {

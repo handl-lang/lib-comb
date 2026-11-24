@@ -10,4 +10,4 @@
 --- `[x ~> x > 3, [1, 2, 3, 4]] >>> comb.some`
 --- -- => true
 ---
-export some :: [pred, xs] ~> combinators.some(pred, xs)
+export some := [pred, xs] ~> combinators.some(pred, xs)

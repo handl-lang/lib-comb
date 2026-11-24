@@ -9,4 +9,4 @@
 --- `[x ~> x > 0, [1, 2, 3]] >>> comb.every`
 --- -- => true
 ---
-export every :: [pred, xs] ~> combinators.every(pred, xs)
+export every := [pred, xs] ~> combinators.every(pred, xs)
