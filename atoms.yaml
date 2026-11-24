@@ -1,0 +1,71 @@
+# lib-comb atom spec (P-013/T-151) — Combinator ops — native impls in the lib-comb crate (`combinators_op_registry`); impl keys are the `handle ... with` hints (rust_ prefix dropped).
+# `sig` = handl signature (~> canonical), `impl` = key for the
+# module's impl table, `total` replaces `guarantee: True` decl
+# clauses. Generated from the cap/op/handle triples in
+# src/combinators.hnl.
+module: combinators
+atoms:
+  - name: combinators.pipe
+    sig: "(Value * Value) ~> Value"
+    impl: fn_pipe
+    total: true
+  - name: combinators.fanout
+    sig: "(Value * Value) ~> Value"
+    impl: fn_fanout
+    total: true
+  - name: combinators.choice
+    sig: "(Value * Value * Value * Value) ~> Value"
+    impl: fn_choice
+    total: true
+  - name: combinators.apply
+    sig: "(Value * Value) ~> Value"
+    impl: fn_apply
+    total: true
+  - name: combinators.flat_map
+    sig: "(Value * Value) ~> Value"
+    impl: fn_flat_map
+    total: true
+  - name: combinators.find
+    sig: "(Value * Value) ~> Value"
+    impl: fn_find
+    total: true
+  - name: combinators.some
+    sig: "(Value * Value) ~> Value"
+    impl: fn_some
+    total: true
+  - name: combinators.every
+    sig: "(Value * Value) ~> Value"
+    impl: fn_every
+    total: true
+  - name: combinators.group_by
+    sig: "(Value * Value) ~> Value"
+    impl: fn_group_by
+    total: true
+  - name: combinators.partition
+    sig: "(Value * Value) ~> Value"
+    impl: fn_partition
+    total: true
+  - name: combinators.count_by
+    sig: "(Value * Value) ~> Value"
+    impl: fn_count_by
+    total: true
+  - name: combinators.tap
+    sig: "(Value * Value) ~> Value"
+    impl: fn_tap
+    total: true
+  - name: combinators.match
+    sig: "(Value * Value) ~> Value"
+    impl: fn_match
+    total: true
+  - name: combinators.when
+    sig: "(Value * Value * Value) ~> Value"
+    impl: fn_when
+    total: true
+  - name: combinators.unless
+    sig: "(Value * Value * Value) ~> Value"
+    impl: fn_unless
+    total: true
+  - name: combinators.converge
+    sig: "(Value * Value * Value) ~> Value"
+    impl: fn_converge
+    total: true
