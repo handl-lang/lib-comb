@@ -1,20 +1,23 @@
 --- combinators -- function combinator utilities for the handl runtime.
 ---
---- Single source of truth for the `combinators` stdlib interface: 16
---- function combinators covering composition, control flow, collection
---- iteration, and pattern matching. The Rust bridge in
---- `plugin-lib-stdlib` loads this file via `include_str!`, parses the
---- `cap` declarations for the plugin capability surface, and registers
---- the Rust handls (handlers) in an `OpRegistry` that dispatches each
---- `op` to its native Rust impl. The `fn` module name resolves to this
---- module as an alias (`kit-canonical`'s `StdlibResolver`).
+--- Documentation surface for the `combinators` module: 16 function
+--- combinators covering composition, control flow, collection
+--- iteration, and pattern matching. The atom spec lives in
+--- `atoms.yaml` (P-013/T-151) — name/sig/impl per op — and the Rust
+--- `Op` impls are in `src/ops.rs`, registered both by
+--- `combinators_op_registry()` here and by the host's spec-driven
+--- `combinators_impls()` table
+--- (`host/crates/plugin-lib-stdlib/src/ops/kernel_impls.rs`), which is
+--- what `plugin-lib-stdlib`'s `combinators` `ModuleSpec` consumes. The
+--- `fn` module name resolves to this module as an alias
+--- (`kit-canonical`'s `StdlibResolver`).
 ---
---- All 16 functions are FFI atoms (they manipulate `serde_json::Value`
---- callables via `apply_fn` from `crate::shared` and cannot be expressed
---- as pure handl arrows without losing the exact `TypeMismatch` error
---- messages the tests rely on). The `op`/`handl` declaration form
---- (ADR-0077 Phase 2) declares the interface; the Rust `Function` impls
---- in `ops/combinators.rs` provide the logic.
+--- The pure-handl counterparts of most of these ops live in the
+--- per-arrow files next to this one (`pipe.hnl`, `when.hnl`, …) and are
+--- exposed as the `comb.*` host module by `kit-prelude`'s
+--- `CombModule`; `combinators.*` remains the native FFI surface for
+--- engines that need `serde_json::Value` callbacks with the exact
+--- `TypeMismatch` error messages the tests rely on.
 ---
 --- ## Capability declarations (ADR-0077 Phase 4)
 --- combinators.pipe -- pipe a value through a sequence of functions left-to-right.

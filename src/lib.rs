@@ -1,9 +1,12 @@
 //! `comb` / `combinators` — Handl stdlib port.
 //!
 //! The per-arrow `.hnl` files are the pure-handl `comb` module surface;
-//! `combinators.hnl` + `ops.rs` are the `combinators` module interface
-//! and its native `Op` impls (moved verbatim from the retired
-//! `kernel/crates/combinators` floor-lib crate).
+//! `combinators.hnl` + `ops.rs` are the `combinators` module doc
+//! surface and its native `Op` impls (moved verbatim from the retired
+//! `kernel/crates/combinators` floor-lib crate). The `combinators.*`
+//! interface spec is `atoms.yaml` (P-013/T-151) — its `impl:` keys
+//! resolve against the host's `combinators_impls()` table in
+//! `plugin-lib-stdlib`'s `ops/kernel_impls.rs`.
 
 /// Checkout root of this repo (build-time).
 pub const ROOT: &str = env!("CARGO_MANIFEST_DIR");

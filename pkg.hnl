@@ -1,4 +1,7 @@
 -- lib-comb: package manifest.
+-- `modules` declares only the `combinators` atom surface; the other
+-- src/*.hnl files are the `comb.*` pure-handl payload vendored for
+-- kit-prelude's CombModule (one HandlModule per file, not a pkg module).
 {
   modules: ["combinators"],
   entry: "src/combinators.hnl",

@@ -6,16 +6,23 @@
 
 | path | role |
 | --- | --- |
-| `src/combinators.hnl` | the package entry (`pkg.hnl` `entry`) |
-| `src/*.hnl` | one file per combinator — `compose`, `pipe`, `flip`, `partial`, `when`/`unless`, `fanout`/`converge`, `group_by`, … |
-| `src/lib.rs`, `src/ops.rs` | const-only Rust crate (embeds the sources) |
+| `src/combinators.hnl` | the `combinators` module doc surface (`pkg.hnl` `entry`) — spec-driven, no decls |
+| `src/*.hnl` | one file per combinator — `compose`, `pipe`, `flip`, `partial`, `when`/`unless`, `fanout`/`converge`, `group_by`, … (the `comb.*` module) |
+| `src/lib.rs`, `src/ops.rs` | embed consts + the native `combinators.*` `Op` impls |
 | `atoms.yaml`, `Cargo.toml`, `xtask/` | atom registry + Rust gate |
 | `pkg.hnl`, `scripts/hnl-gate.sh` | manifest + `.hnl` gate |
 | `workflows/gate.yaml` | CI — shared `handl-gates` campaign |
 
 ## Contract
 
-- Pure `.hnl` arrows; the Rust side is a const/embed shim, not logic.
+- Two surfaces: `comb.*` = the per-arrow pure-handl files (loaded by
+  `kit-prelude`'s `CombModule`); `combinators.*` = the 16 native
+  `handl_ops::Op` impls in `src/ops.rs`.
+- `atoms.yaml` (P-013/T-151) is the `combinators` spec — its `impl:`
+  keys (`fn_pipe`, …) resolve against the host's `combinators_impls()`
+  table in `plugin-lib-stdlib` `ops/kernel_impls.rs`, NOT against
+  anything in this repo. `combinators.hnl` is doc-only by convention
+  (the cap/op/handle decl triples were stripped fleet-wide).
 - Deps resolve from git — plain clone test-runs as-is.
 
 ## Verification

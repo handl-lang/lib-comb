@@ -7,16 +7,20 @@
 //! through the `apply_callable*`/`call_with_bindings` helpers in
 //! `handl_lib_ops::shared`, which dispatch on the value shape:
 //! arrow-values are invoked via `ctx.try_call_value`, `FunctionValue`
-//! JSON via `eval_expr`. The `op`/`handl` declaration form (ADR-0077
-//! Phase 2) declares the interface in `combinators.hnl`; these impls
-//! provide the logic and are registered in an
-//! [`OpRegistry`](handl_ops::OpRegistry).
+//! JSON via `eval_expr`. `atoms.yaml` (P-013/T-151) is the interface
+//! spec; these impls provide the logic and are registered in an
+//! [`OpRegistry`].
 //!
 //! The function-*producing* ops (`flow`/`compose`/`fanout_fn`/
 //! `constantly`/`flip`/`partial`) were removed: they only accepted and
 //! returned legacy `FunctionValue` JSON, which no engine can call. The
-//! pure-handl `comb.*` surface in `handl-packages/comb/*.hnl` covers the
-//! same operations with real arrows.
+//! pure-handl `comb.*` surface in the per-arrow `.hnl` files next to
+//! this one covers the same operations with real arrows.
+//!
+//! The interface spec is `atoms.yaml` (P-013/T-151): the `impl:` keys
+//! (`fn_pipe`, …) resolve against the host's `combinators_impls()`
+//! table; `combinators_op_registry()` below is the same wiring kept for
+//! consumers that still use it directly.
 
 use handl_ops::{Op, OpContext, OpError};
 
@@ -119,7 +123,7 @@ impl Op for Converge {
             }
             acc
         };
-        Ok(serde_json::Value::from(combined))
+        Ok(combined)
     }
 }
 
@@ -246,7 +250,7 @@ fn match_pattern(
                             .as_array()
                             .ok_or_else(|| OpError::Other("invalid object pattern entry".into()))?;
                         let key = arr
-                            .get(0)
+                            .first()
                             .and_then(|v| v.as_str())
                             .ok_or_else(|| OpError::Other("invalid object pattern key".into()))?;
                         let child_pattern = arr
@@ -398,10 +402,10 @@ impl Op for Find {
         let (fn_arg, array) = require_callable_and_array(args)?;
         for item in array {
             if is_truthy_callable(ctx, fn_arg, item)? {
-                return Ok(serde_json::Value::from(item.clone()));
+                return Ok(item.clone());
             }
         }
-        Ok(serde_json::Value::from(serde_json::Value::Null))
+        Ok(serde_json::Value::Null)
     }
 }
 
@@ -465,7 +469,7 @@ impl Op for GroupBy {
         for (k, v) in groups {
             result.insert(k, serde_json::Value::Array(v));
         }
-        Ok(serde_json::Value::from(serde_json::Value::Object(result)))
+        Ok(serde_json::Value::Object(result))
     }
 }
 
@@ -517,7 +521,7 @@ impl Op for CountBy {
         for (k, v) in counts {
             result.insert(k, serde_json::json!(v));
         }
-        Ok(serde_json::Value::from(serde_json::Value::Object(result)))
+        Ok(serde_json::Value::Object(result))
     }
 }
 
