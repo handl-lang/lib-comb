@@ -1,0 +1,57 @@
+--- Smoke tests for the pure-handl `comb.*` combinators — the per-arrow
+--- files in `src/` that `kit-prelude`'s CombModule exposes as `comb.*`.
+--- The `combinators.*` native surface (`combinators.hnl`, atoms.yaml)
+--- needs the host Op registry and is covered by Rust tests instead.
+---
+--- `choice` is a reserved word in this dialect, so it is imported
+--- under an alias. `pipe`/`fanout`/`converge`/`choice` take a single
+--- array argument (`args ~> match args { [value, ...rest]: … }`).
+
+from "./flow" import { flow }
+from "./flip" import { flip }
+from "./constantly" import { constantly }
+from "./compose" import { compose }
+from "./apply" import { apply }
+from "./when" import { when }
+from "./unless" import { unless }
+from "./tap" import { tap }
+from "./partial" import { partial }
+from "./choice" import { choice as pick }
+from "./pipe" import { pipe }
+from "./fanout" import { fanout }
+from "./converge" import { converge }
+
+test_flow := assert flow([(n) ~> n + 1, (n) ~> n * 2])(3) == 8
+
+test_flip := assert flip((a, b) ~> a - b)(10, 3) == -7
+
+test_constantly := assert constantly(7)("ignored") == 7
+
+-- compose is right-to-left: compose([f, g])(x) == f(g(x)).
+test_compose := assert compose([(n) ~> n + 1, (n) ~> n * 2])(3) == 7
+
+-- apply pipes the args array into f as a single value.
+test_apply := assert apply((xs) ~> xs[0] + xs[1], [2, 3]) == 5
+
+test_when_true := assert when(5, (n) ~> n > 0, (n) ~> n * 10) == 50
+
+test_when_false := assert when(-1, (n) ~> n > 0, (n) ~> n * 10) == -1
+
+test_unless_true := assert unless(5, (n) ~> n > 0, (n) ~> n * 10) == 5
+
+test_unless_false := assert unless(-1, (n) ~> n > 0, (n) ~> n * 10) == -10
+
+test_tap := assert tap((n) ~> n, 9) == 9
+
+test_partial := assert partial((a, b, x) ~> a + b + x, [1, 2])(3) == 6
+
+test_choice_true := assert pick(5, (n) ~> n > 0, (n) ~> "pos", (n) ~> "neg") == "pos"
+
+test_choice_false := assert pick(-1, (n) ~> n > 0, (n) ~> "pos", (n) ~> "neg") == "neg"
+
+test_pipe := assert pipe([3, (n) ~> n + 1, (n) ~> n * 2]) == 8
+
+test_fanout := assert fanout([2, (n) ~> n + 1, (n) ~> n * 3]) == [3, 6]
+
+-- converge: branches apply to the value, combiner folds the results.
+test_converge := assert converge([2, (a, b) ~> a + b, (n) ~> n + 1, (n) ~> n * 3]) == 9
