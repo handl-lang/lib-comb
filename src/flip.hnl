@@ -10,7 +10,7 @@
 ---
 --- @example
 --- `sub :: [a, b] ~> a - b`
---- `[10, 3] >>> (sub >>> comb.flip) >>> comb.apply`
+--- `comb.flip(sub)(10, 3)`
 --- -- => -7
 ---
 export flip := f ~> x ~> y ~> f(y, x)
